@@ -1,5 +1,5 @@
 from logger import logger
-
+import globals
 from auth.gateio_auth import *
 from gate_api import ApiClient, Configuration, Order, SpotApi
 from gate_api.exceptions import ApiException, GateApiException
@@ -46,14 +46,15 @@ def place_order(base,quote, amount, side, last_price):
     Args:
     'DOT', 'USDT', 50, 'buy', 400
     """
-    try:
-        order = Order(amount=str(float(amount)/float(last_price)), price=last_price, side=side, currency_pair=f'{base}_{quote}', time_in_force='ioc')
-        order = spot_api.create_order(order)
-        t = order
-        logger.info(f"PLACE ORDER: {t.side} | {t.id} | {t.account} | {t.type} | {t.currency_pair} | {t.status} | amount={t.amount} | price={t.price} | left={t.left} | filled_total={t.filled_total} | fill_price={t.fill_price} | fee={t.fee} {t.fee_currency}")
-    except Exception as e:
-        logger.error(e)
-        raise
+    if not globals.test_mode:
+        try:
+            order = Order(amount=str(float(amount)/float(last_price)), price=last_price, side=side, currency_pair=f'{base}_{quote}', time_in_force='ioc')
+            order = spot_api.create_order(order)
+            t = order
+            logger.info(f"PLACE ORDER: {t.side} | {t.id} | {t.account} | {t.type} | {t.currency_pair} | {t.status} | amount={t.amount} | price={t.price} | left={t.left} | filled_total={t.filled_total} | fill_price={t.fill_price} | fee={t.fee} {t.fee_currency}")
+        except Exception as e:
+            logger.error(e)
+            raise
 
-    else:
-        return order
+        else:
+            return order
