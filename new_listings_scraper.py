@@ -130,6 +130,20 @@ def search_and_update():
     else:
         logger.info("while loop in search_and_update() has stopped.")
 
+def new_search_and_update():
+    """
+    Pretty much our main func
+    """
+    try:
+        latest_coin = get_last_coin()
+        logger.info(f"Checking for coin announcements")
+    except Exception as e:
+        logger.info(e)
+    if(latest_coin):
+        return latest_coin
+    else:
+        return None
+
 
 def get_all_currencies(single=False):
     """

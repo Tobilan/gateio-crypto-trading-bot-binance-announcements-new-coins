@@ -1,7 +1,9 @@
 from trade_client import get_last_price, place_order
 from logger import logger
 import globals
-import threading
+from threading import Thread,Event
+import time
+
 
 # TODO this class needs updated data on the accumulated position during runtime. (thread-safe ! )
 # TODO this means: amount to sell, mean-buy price of the position, the 'true' position ( minus fees)
@@ -9,36 +11,38 @@ import threading
 return_price_only = True
 
 
-class TrailingStopLoss(threading.Thread):
+class SellClass(Thread):
     """
     Handles selling of a position. Is able to sell according to trailing stop loss or only stop loss. Does this in a
     thread
-    Args:
-    'LTC', 300
     """
 
-    def __init__(self, base, price):
-        super().__init__()
-        logger.info(f'Opened position: {base}, {price}')
-        self.base = base
+    def __init__(self, positionStorage):
+        super(SellClass,self).__init__()
+        self._monitor_position = Event()
+        self._monitor_position.set()
+        self.positionStorage = positionStorage
+        self.base = positionStorage.get_name()
+        logger.info(f'Begin to monitor position: {self.base}')
+
         self.quote = globals.pairing
-        self.amount = 10
-        self.initial_price = price
-        self.last_price = price
-        self.current_price = price
-
-        self.stop_loss = self.initial_price - (self.initial_price * abs(globals.sl) / 100)
-
-        self.trailing_reference = price
-
         self.tsl_percent = abs(globals.tsl) / 100
         self.ttp_percent = abs(globals.ttp) / 100
 
+        self.amount = self.positionStorage.get_amount()
+        self.base_price = self.positionStorage.get_average_price()
+        self.last_price = self.positionStorage.get_average_price()
+        self.current_price = self.positionStorage.get_average_price()
+        self.trailing_reference = self.positionStorage.get_average_price()
+
+        self.stop_loss = self.base_price - (self.base_price * abs(globals.sl) / 100)
         self.trailing_stop_loss = self.trailing_reference - (self.trailing_reference * self.tsl_percent)
+
         if globals.enable_tsl:
-            self.take_profit = self.initial_price + (self.initial_price * self.ttp_percent)
+            self.take_profit = self.base_price + (self.base_price * self.ttp_percent)
         else:
-            self.take_profit = self.initial_price + (self.initial_price * globals.tp)
+            self.take_profit = self.base_price + (self.base_price * globals.tp)
+
 
     def update_trailing(self):
         """
@@ -57,20 +61,45 @@ class TrailingStopLoss(threading.Thread):
         if (self.current_price <= self.stop_loss) or (self.current_price <= self.trailing_stop_loss):
             logger.info(
                 f'stop loss order at: {self.current_price} | stop_loss at: {self.stop_loss} | tsl at: {self.trailing_stop_loss}')
-            place_order(self.base, self.quote, self.amount, 'sell', self.current_price)
+            self.sell()
+
         elif (self.current_price > self.take_profit):
             logger.info(
                 f'take profit order at: {self.current_price} | stop_loss at: {self.stop_loss} | tsl at: {self.trailing_stop_loss}')
-            place_order(self.base, self.quote, self.amount, 'sell', self.current_price)
+            self.sell()
+
+
+    def sell(self):
+        # TODO: Implement logic for partial sells and handling of return object 'order' of the place_order method
+        place_order(self.base, self.quote, self.amount, 'sell', self.current_price)
+        self.positionStorage.sell_position(self.amount)
+        if self.positionStorage.get_amount() <= 0:
+            self.stop()
 
     def update_price(self):
         self.current_price = float(get_last_price(self.base, self.quote, return_price_only))
-        logger.debug(f'current price price for {self.base}: {self.current_price} in {self.quote}')
+        logger.info(f'current price price for {self.base}: {self.current_price} in {self.quote}')
+
+    def update_position(self):
+        self.amount = self.positionStorage.get_amount()
+        self.base_price = self.positionStorage.get_average_price()
+        logger.debug(f'updated position:  {self.amount}: {self.base_price} in {self.quote}')
+
+
+    def stop(self):
+        self._monitor_position.clear()
+
+    def join(self, *args, **kwargs):
+        self.stop()
+        super(SellClass, self).join(*args, **kwargs)
 
     def update(self):
+        self.update_position()
         self.update_price()
-        if (globals.enable_tsl):
+        if globals.enable_tsl:
             self.update_trailing()
+
+
         self.calc_trade_decision()
 
     def run(self):
@@ -78,22 +107,11 @@ class TrailingStopLoss(threading.Thread):
         inherited from threading
         """
         logger.info(f'start thread for selling position: {self.base}')
-        while self.amount > 0:
+        while self._monitor_position.isSet():
             self.update()
             time.sleep(.01)
 
         logger.info(f'stop thread for selling position: {self.base}')
 
 
-if __name__ == '__main__':
-    """
-    short example
-    """
-    import time
 
-    logger.setLevel('DEBUG')
-    globals.test_mode = True
-    example = TrailingStopLoss('LTC', 265)
-    example.start()
-    time.sleep(5)
-    example.amount = 0

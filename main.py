@@ -13,6 +13,8 @@ import json
 from json import JSONEncoder
 import os.path
 import sys, os
+from positionstorage.PositionStorage import PositionStorage
+
 
 # To add a coin to ignore, add it to the json array in old_coins.json
 globals.old_coins = load_old_coins()
@@ -449,7 +451,30 @@ def main():
         t_buy_thread.join()
         t_sell_thread.join()
 
+def new_main():
+    test = True
+    try:
+        while True:
+            new_listing = new_search_and_update()
+            if test:
+                new_listing = 'ETH'
+                test = False
+            else:
+                new_listing = None
+            if new_listing:
+                position = PositionStorage(new_listing)
+                position.start_trade()
+
+            time.sleep(100)
+
+    except KeyboardInterrupt:
+        logger.info('Stopping Threads')
+        position.stop_trade()
+
+
 
 if __name__ == '__main__':
+    logger.setLevel('DEBUG')
     logger.info('working...')
-    main()
+    new_main()
+

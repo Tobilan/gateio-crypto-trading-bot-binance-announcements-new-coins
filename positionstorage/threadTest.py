@@ -31,59 +31,84 @@ class Data:
         with self.lock:
             self.amount -= amount
 
+    def start_trade(self):
+        buyThread = BuyClass(self)
+        sellThread = SellClass(self)
+
+        buyThread.start()
+        sellThread.start()
 
 class SellClass(Thread):
     def __init__(self, data):
-        super().__init__()
+        super(SellClass, self).__init__()
+        self._stop_event = threading.Event()
         self.data = data
         self.sell = False
         self.proceed = True
 
+    def stop(self):
+        self._stop_event.set()
+
+    def join(self, *args, **kwargs):
+        self.stop()
+        super(SellClass,self).join(*args, **kwargs)
+
     def output(self):
         if (self.data.get_amount() > 0):
-            self.data.sell_data(1)
+            self.data.sell_position(1)
         print(f'after sell: {self.data.get_amount()}')
 
     def run(self):
-        while self.proceed:
+        while not self._stop_event.isSet():
             if (self.data.get_amount() > 0):
                 self.sell = True
             self.output()
             if (self.data.get_amount() <= 0) and self.sell:
-                self.proceed = False
+                self.stop()
             time.sleep(0.1)
 
 
 class BuyClass(Thread):
     def __init__(self, data):
-        super().__init__()
+        super(BuyClass, self).__init__()
+        self._stop_event = threading.Event()
         self.data = data
+
+    def stop(self):
+        self._stop_event.set()
+
+    def join(self, *args, **kwargs):
+        self.stop()
+        super(BuyClass,self).join(*args, **kwargs)
 
     def input_new_positions(self, amount, price):
         data.update_data(amount, price)
-        # print(f'updated with: {amount} {price}')
         print(f'after buy: {self.data.get_amount()}')
 
     def run(self):
-        for i in range(0, 10):
-            self.input_new_positions(10, 30)
-            time.sleep(0.6)
+        while not self._stop_event.isSet():
+            for self.i in range(0, 3):
+                self.input_new_positions(10, 30)
+                time.sleep(0.6)
+            self.stop()
 
 
 if __name__ == "__main__":
     # data = Data('BTC',0,0)
     data = Data('BTC')
 
-    buy1 = BuyClass(data)
-    buy2 = BuyClass(data)
-    buy3 = BuyClass(data)
-    buy4 = BuyClass(data)
-    buy5 = BuyClass(data)
+    data.start_trade()
 
-    sell = SellClass(data)
-
-    buy1.start()
-    sell.start()
+    # buy1 = BuyClass(data)
+    # buy2 = BuyClass(data)
+    # buy3 = BuyClass(data)
+    # buy4 = BuyClass(data)
+    # buy5 = BuyClass(data)
+    #
+    # sell = SellClass(data)
+    #
+    # buy1.start()
+    # sell.start()
     # buy2.start()
     # buy3.start()
     # buy4.start()
